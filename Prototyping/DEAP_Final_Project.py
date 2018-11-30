@@ -59,8 +59,8 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random
 
 toolbox = base.Toolbox()
 
-creator.create("FitnessMax", base.Fitness, weights=(1.0,))
-creator.create("Individual", list, fitness=creator.FitnessMax)
+creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
+creator.create("Individual", list, fitness=creator.FitnessMin)
 ind = [random.randint(0, 1) for x in range(355)]
 
 toolbox.register("indices", numpy.random.permutation, ind)
@@ -116,6 +116,21 @@ def calculate_correlation(arr):
     
     return correlation
 
+def get_error(individual):
+
+    X_train_in, y_train_in, X_test_in, y_test_in = parse_df_via_individual(individual)
+    
+    if len(X_train.columns) == 0:    
+        return 1.0
+    
+    X_train_scaled, X_test_scaled = scale(X_train), scale(X_test)
+    
+    clf = svm.SVC()
+    clf.fit(X_train_scaled, y_train_in)
+    y_pred = clf.predict(X_test_scaled)
+    
+    error = mean_squared_error(y_true=y_test_in, y_pred=y_pred)
+    return error
 
 
 def fitness_evaluate(individual):
@@ -145,8 +160,8 @@ def fitness_evaluate(individual):
     
     X_train_in, y_train_in, X_test_in, y_test_in = parse_df_via_individual(individual)
     
-    if len(X_train.columns) == 0:    
-        return 1.0
+    if len(X_train.columns) == 0 or individual.count(1) == 0:    
+        return 100,
     
     X_train_scaled, X_test_scaled = scale(X_train), scale(X_test)
     
@@ -154,10 +169,10 @@ def fitness_evaluate(individual):
     clf.fit(X_train_scaled, y_train_in)
     y_pred = clf.predict(X_test_scaled)
     
-    acc = accuracy_score(y_true=y_test_in, y_pred=y_pred)
+    error = mean_squared_error(y_true=y_test_in, y_pred=y_pred)
     total_correlation = calculate_correlation(X_train_in)
     
-    return int(acc * total_correlation),
+    return int(error * (total_correlation + individual.count(1))) ,
 
 
 def main():
@@ -183,6 +198,10 @@ def main():
     toolbox.register("mutate", tools.mutShuffleIndexes, indpb=0.05)
 
     CXPB, MUTPB = 0.5, 0.4
+
+    #best_ind_from_last = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    best_ind_from_last = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    print(1 - get_error(best_ind_from_last))
     
     print("Start of evolution")
 
@@ -205,8 +224,10 @@ def main():
     # Variable keeping track of the number of generations
     gen = 0
 
-    # Begin the evolution
-    while gen < 150 :
+    best_ind = [1 for x in range(350)]
+
+    while (best_ind.count(1) > 6) and not (best_ind.count(1) == 0):
+        # Begin the evolution
         # A new generation
         gen = gen + 1
 
@@ -253,9 +274,11 @@ def main():
         
         # Gather all the fitnesses in one list and print the stats
         fits = [ind.fitness.values[0] for ind in pop]
-        
-      
-        
+
+        best_ind = tools.selBest(pop, 1)[0]
+
+        print("Best individual is %s with Fitness %s" % (best_ind, best_ind.fitness.values))
+        print('Best individual 1 count: {}'.format(best_ind.count(1)))
     
     print("-- End of (successful) evolution --")
     
