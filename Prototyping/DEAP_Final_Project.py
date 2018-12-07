@@ -1,6 +1,6 @@
 
-import random
 
+import random
 from deap import base
 from deap import creator
 from deap import tools
@@ -8,15 +8,22 @@ from deap import algorithms
 from sklearn import svm
 from sklearn.metrics import mean_squared_error
 from sklearn import model_selection
+import matplotlib.pyplot as plt
+import seaborn as sns; sns.set()
 import random
 import pandas as pd
 from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import scale
+from sklearn.metrics import roc_curve, auc
 from sklearn.metrics import accuracy_score
+from scipy import interp
 import numpy
+import numpy as np
 import statistics 
 pd.options.display.max_rows = 999
 
+print('Loaded librarys')
 def load_data(files=['BRAF_train_moe_class.csv', 'BRAF_test_moe_class.csv'], drop = True):
     '''Loads the data from the specific two files given 
     and then concatenates the two to a single DataFrame.
@@ -47,7 +54,7 @@ def load_data(files=['BRAF_train_moe_class.csv', 'BRAF_test_moe_class.csv'], dro
     return df
 
 
-
+print('Loading data')
 df = load_data()
 
 y = df['class']
@@ -56,9 +63,10 @@ X = df.drop(['class'], axis=1)
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=42)
 
-
+print('Setting up toolbox')
 toolbox = base.Toolbox()
 
+print('Creating functions')
 creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
 creator.create("Individual", list, fitness=creator.FitnessMin)
 ind = [random.randint(0, 1) for x in range(355)]
@@ -160,7 +168,7 @@ def fitness_evaluate(individual):
     
     X_train_in, y_train_in, X_test_in, y_test_in = parse_df_via_individual(individual)
     
-    if len(X_train.columns) == 0 or individual.count(1) == 0:    
+    if len(X_train.columns) < 5 or individual.count(1) < 5:    
         return 100,
     
     X_train_scaled, X_test_scaled = scale(X_train), scale(X_test)
@@ -173,6 +181,74 @@ def fitness_evaluate(individual):
     total_correlation = calculate_correlation(X_train_in)
     
     return int(error * (total_correlation + individual.count(1))) ,
+
+
+def plot_columns_over_time(data):
+
+    sns_plot = sns.lineplot(x = 'generation number', y = 'column count', data=data)
+    fig = sns_plot.get_figure()
+    fig.savefig('columns over time.png')
+    fig.clear()
+
+def plot_accuracy_over_time(data):
+
+    sns_plot = sns.lineplot(x = 'generation number', y = 'accuracy score', data=data)
+    fig = sns_plot.get_figure()
+    fig.savefig('accuracy score over time.png')
+    fig.clear()
+
+def build_roc_curve(X, y, classifier):
+    
+    n_samples, n_features = X.shape
+    
+    cv = StratifiedKFold(n_splits=6)
+    
+    tprs = []
+    aucs = []
+    mean_fpr = np.linspace(0, 1, 100)
+    
+    i = 0
+    
+    for train_index, test_index in cv.split(X, y):
+        X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+        y_train, y_test = y.iloc[train_index], y.iloc[test_index]
+
+        probas_ = classifier.fit(X_train, y_train).predict_proba(X_test)
+
+        fpr, tpr, threshold = roc_curve(y_test, probas_[:, 1])
+        tprs.append(interp(mean_fpr, fpr, tpr))
+        tprs[-1][0] = 0.0
+        roc_auc = auc(fpr, tpr)
+        aucs.append(roc_auc)
+        plt.plot(fpr, tpr, lw=1, alpha=0.3,
+                label='ROC fold %d (AUC = %0.2f)' % (i, roc_auc))
+        i += 1
+
+    plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r',
+             label='Chance', alpha=.8)
+
+    mean_tpr = np.mean(tprs, axis=0)
+    mean_tpr[-1] = 1.0
+    mean_auc = auc(mean_fpr, mean_tpr)
+    
+    std_auc = np.std(aucs)
+    plt.plot(mean_fpr, mean_tpr, color='b',
+             label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, std_auc),
+             lw=2, alpha=.8)
+
+    std_tpr = np.std(tprs, axis=0)
+    tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
+    tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
+    plt.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2,
+                     label=r'$\pm$ 1 std. dev.')
+
+    plt.xlim([-0.05, 1.05])
+    plt.ylim([-0.05, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver operating characteristic example')
+    plt.legend(loc="lower right")
+    plt.savefig('ROC_curve.png')
 
 
 def main():
@@ -226,6 +302,10 @@ def main():
 
     best_ind = [1 for x in range(350)]
 
+    to_plot = pd.DataFrame()
+    column_counts = []
+    accuracy_score_list = []
+
     while (best_ind.count(1) > 6) and not (best_ind.count(1) == 0):
         # Begin the evolution
         # A new generation
@@ -276,7 +356,11 @@ def main():
         fits = [ind.fitness.values[0] for ind in pop]
 
         best_ind = tools.selBest(pop, 1)[0]
-
+        
+        column_counts.append(best_ind.count(1))
+        error = get_error(best_ind)
+        print('Accuracy of the best individual is: {}'.format(1 - error))
+        accuracy_score_list.append(1 - get_error(best_ind))
         print("Best individual is %s with Fitness %s" % (best_ind, best_ind.fitness.values))
         print('Best individual 1 count: {}'.format(best_ind.count(1)))
     
@@ -284,6 +368,12 @@ def main():
     
     best_ind = tools.selBest(pop, 1)[0]
     print("Best individual is %s with Fitness %s" % (best_ind, best_ind.fitness.values))
+    to_plot['generation number'] = list(range(gen))
+    to_plot['column count'] = column_counts
+    to_plot['accuracy score'] = accuracy_score_list
+    plot_columns_over_time(to_plot)
+    build_roc_curve(X[X.columns[best_ind_from_last]], y, svm.SVC(probability=True))
+    #plot_accuracy_over_time(to_plot)
 
 
 
